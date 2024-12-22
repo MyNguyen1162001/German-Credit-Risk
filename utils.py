@@ -76,3 +76,27 @@ def visualize_numerical_features(
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_categorical_violin(
+        dataset = pd.DataFrame, 
+        cat_column = List[str], 
+        num_column = str,
+        target_column= str, 
+        title='Distribution by Credit Risk'
+) -> None:
+    for category in cat_column:
+        plt.figure(figsize=(12, 6))
+        sns.violinplot(data=dataset, 
+                    x=category,
+                    y= num_column,
+                    hue=target_column,
+                    split=True,
+                    inner='box')
+        
+        plt.title(f'{num_column} Distribution by {category.title()} and {target_column}')
+        plt.xlabel(category.title())
+        plt.ylabel(target_column)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()  
