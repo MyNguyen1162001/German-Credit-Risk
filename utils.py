@@ -5,6 +5,8 @@ from typing import List
 
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelEncoder
+
 
 def visualize_category_features(
     dataset: pd.DataFrame,
@@ -100,3 +102,69 @@ def plot_categorical_violin(
         plt.xticks(rotation=45)
         plt.tight_layout()
         plt.show()  
+
+
+def process_categorical_features (
+        dataset = pd.DataFrame,
+        categories_columns = List[str],
+        fill_value  = str ,
+        encoding_type = str == 'onehot'
+) -> pd.DataFrame: 
+    for col in categories_columns: 
+        dataset[col] = dataset[col].replace(
+                    ['nan', 'None', 'NaN', 'null', '', ' '], 
+                    fill_value
+                )
+        dataset[col] = dataset[col].fillna('missing')
+
+        if encoding_type == 'label':
+            encoders = {}
+            le = LabelEncoder()
+            dataset[col] = le.fit_transform(dataset[col])
+        elif encoding_type == 'onehot':
+        # Create dummy variables with drop_first=True to avoid multicollinearity
+            df_encoded = pd.get_dummies(
+                dataset[col], 
+                columns=col,
+                drop_first=True,
+                prefix=col
+            )
+            dataset = pd.concat([
+                dataset.drop(columns=col), 
+                df_encoded
+            ], axis=1)
+    return dataset
+
+
+def processing_numerical_columns(
+        dataset: pd.DataFrame,
+        numerical_columns: List[str],
+        fill_strategy: str = 'zero',
+        handle_outliers: bool = True,
+        scaling_type: str = 'standard'
+) -> pd.DataFrame: 
+    for col in numerical_columns: 
+        if fill_strategy == 'zero':
+            dataset[col] = dataset[col].fillna(0)
+        if fill_strategy == 'mean':
+            fill_value = dataset[col].mean()
+            dataset[col] = dataset[col].fillna(fill_value)
+        if fill_strategy == 'median':
+            fill_value = dataset[col].median()
+            dataset[col] = dataset[col].fillna(fill_value)
+    if handle_outliers:
+        for col in numerical_columns:
+            Q1 = dataset[col].quantile(0.25)
+            Q3 = dataset[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            # Cap outliers
+            dataset[col] = dataset[col].clip(lower_bound, upper_bound)
+    if scaling_type == 'standard':
+        scaler = StandardScaler()
+    elif scaling_type == 'minmax':
+        scaler = MinMaxScaler()
+    elif scaling_type == 'robust':
+        scaler = RobustScaler()
+    return dataset
