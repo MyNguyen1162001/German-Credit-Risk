@@ -4,6 +4,7 @@ import seaborn as sns
 from typing import List
 
 import matplotlib.pyplot as plt
+import matplotlib
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelEncoder
 
@@ -81,11 +82,12 @@ def visualize_numerical_features(
 
 
 def plot_categorical_violin(
-        dataset = pd.DataFrame, 
-        cat_column = List[str], 
-        num_column = str,
-        target_column= str, 
-        title='Distribution by Credit Risk'
+        dataset : pd.DataFrame, 
+        cat_column : List[str], 
+        num_column : str,
+        target_column: str, 
+        title = 'Distribution by Credit Risk',
+        # colors : List[str] = ['#91c08b', '#8080ff']
 ) -> None:
     for category in cat_column:
         plt.figure(figsize=(12, 6))
@@ -94,8 +96,42 @@ def plot_categorical_violin(
                     y= num_column,
                     hue=target_column,
                     split=True,
-                    inner='box')
+                    inner='box',
+                    linewidth=1.5,       
+                    saturation=0.75)
+
+        plt.title(f'{num_column} Distribution by {category.title()} and {target_column}')
+        plt.xlabel(category.title())
+        plt.ylabel(target_column)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()  
+
+
+def plot_categorical_violin_not_default(
+        dataset : pd.DataFrame, 
+        cat_column : List[str], 
+        num_column : str,
+        target_column: str, 
+        title = 'Distribution by Credit Risk',
+        colors : List[str] = ['#91c08b', '#8080ff']
+) -> None:
+    for category in cat_column:
+        plt.figure(figsize=(12, 6))
+        ax = sns.violinplot(data=dataset, 
+                    x=category,
+                    y= num_column,
+                    hue=target_column,
+                    split=True,
+                    inner='box',
+                    palette=colors,
+                    linewidth=1.5,       
+                    saturation=1)
         
+        for violin in ax.collections:
+            if isinstance(violin, matplotlib.collections.PolyCollection):
+                violin.set_edgecolor(violin.get_facecolor())
+
         plt.title(f'{num_column} Distribution by {category.title()} and {target_column}')
         plt.xlabel(category.title())
         plt.ylabel(target_column)
