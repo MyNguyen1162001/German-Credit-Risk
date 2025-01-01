@@ -439,3 +439,43 @@ def split_train_test(
         # y_train = np.array(y_train)
 
     return X_train_scaled, X_test_scaled, y_train, y_test
+
+
+def plot_credit_boxplot(
+    dataset: pd.DataFrame,
+    cat_column: List[str],
+    num_column: str,
+    target_column: str,
+    colors: List[str] = ['#91c08b', '#ff9999'],  # Light green for good, light red for bad
+    figsize_length : int = 12,
+    figsize_width: int = 6
+) -> None:
+    plt.figure(figsize=(figsize_length, figsize_width))
+    
+    # Create boxplot with customization
+    for category in cat_column:
+        sns.boxplot(data=dataset,
+                    x=category,
+                    y=num_column,
+                    hue=target_column,
+                    palette=colors,
+                    flierprops={'marker': 'o', 'markerfacecolor': None, 'markersize': 4},
+                    boxprops={'alpha': 0.5},
+                    whiskerprops={'linestyle': '-'},
+                    medianprops={'color': 'black'},
+                    showfliers=True)  # Show outlier points
+        
+        # Customize the plot
+        plt.title(f'{num_column} Distribution by {category} and Credit Risk')
+        plt.xlabel(f'{category}')
+        plt.ylabel('Credit Amount (US Dollar)')
+        
+        # Customize legend
+        plt.legend(title='', labels=['good', 'bad'], 
+                bbox_to_anchor=(1, 1), loc='upper right')
+        
+        # Add gridlines
+        plt.grid(axis='y', linestyle='--', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
