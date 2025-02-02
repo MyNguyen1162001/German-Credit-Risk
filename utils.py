@@ -479,3 +479,111 @@ def plot_credit_boxplot(
         
         plt.tight_layout()
         plt.show()
+
+
+def ScoreScalingParameters (
+        points_to_double_odds=20, 
+        ref_score=600, 
+        ref_odds=50
+):
+    factor = points_to_double_odds / np.log(2)
+    offset = ref_score - factor * np.log(ref_odds)
+    return factor, offset
+
+
+def calculate_woe_iv(
+        X: pd.DataFrame,
+        y: pd.DataFrame,
+        feature, 
+        bins=10
+):  
+      
+    bins_dict = {}
+    if X[feature].dtypes in ['object', 'category']:
+        # For categorical variables, use unique values as bins
+        groups = pd.qcut(X[feature].astype('category').cat.codes, q=bins, duplicates='drop')
+    else:
+        # For numerical variables, create equal-frequency bins
+        groups = pd.qcut(X[feature], q=bins, duplicates='drop')
+    
+    # Store bin edges for future use
+    bins_dict[feature] = groups.unique()
+    grouped = pd.DataFrame({'group': groups, 'target': y}).groupby('group')
+    woe_dict = {}
+    iv_dict = {}
+    iv = 0
+    
+    for group in grouped.groups.keys():
+        group_stats = grouped.get_group(group)
+        good = sum(group_stats['target'] == 0)
+        bad = sum(group_stats['target'] == 1)
+        
+        # Add smoothing to handle zero counts
+        good = good + 0.5
+        bad = bad + 0.5
+        
+        good_rate = good / sum(y == 0)
+        bad_rate = bad / sum(y == 1)
+        
+        woe = np.log(good_rate / bad_rate)
+        iv += (good_rate - bad_rate) * woe
+        
+        woe_dict[group] = woe
+    
+    woe_dict[feature] = woe_dict
+    iv_dict[feature] = iv
+    
+    return woe_dict, iv
+
+
+def transform_woe(
+        woe_dict: pd.DataFrame,
+        X: pd.DataFrame, 
+        feature: str
+):
+    if X[feature].dtype in ['object', 'category']:
+        groups = pd.qcut(X[feature].astype('category').cat.codes, 
+                        q=len(bins_dict[feature]), 
+                        duplicates='drop')
+    else:
+        groups = pd.qcut(X[feature], 
+                        q=len(bins_dict[feature]), 
+                        duplicates='drop')
+    
+    return groups.map(woe_dict[feature])
+
+
+def fit(self, X, y):
+    """Fit the scorecard model"""
+    # Calculate WoE and IV for all features
+    X_woe = pd.DataFrame()
+    for feature in X.columns:
+        calculate_woe_iv(X, y, feature)
+        X_woe[feature] = transform_woe(X, feature)
+    
+    # Fit logistic regression
+    model = LogisticRegression(random_state=42)
+    model.fit(X_woe, y)
+    
+    return self
+
+
+def transform_to_score(model, X, offset, factor):
+    """Transform features to credit score"""
+    X_woe = pd.DataFrame()
+    for feature in X.columns:
+        X_woe[feature] = transform_woe(X, feature)
+    
+    # Calculate log odds
+    log_odds = model.predict_proba(X_woe)[:, 1]
+    log_odds = np.log(log_odds / (1 - log_odds))
+    
+    # Transform to score
+    scores = offset + factor * log_odds
+    return scores
+
+
+
+
+
+    
