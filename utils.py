@@ -494,46 +494,47 @@ def ScoreScalingParameters (
 def calculate_woe_iv(
         X: pd.DataFrame,
         y: pd.DataFrame,
-        feature, 
+        features, 
         bins=10
 ):  
       
     bins_dict = {}
-    if X[feature].dtypes in ['object', 'category']:
-        # For categorical variables, use unique values as bins
-        groups = pd.qcut(X[feature].astype('category').cat.codes, q=bins, duplicates='drop')
-    else:
-        # For numerical variables, create equal-frequency bins
-        groups = pd.qcut(X[feature], q=bins, duplicates='drop')
-    
-    # Store bin edges for future use
-    bins_dict[feature] = groups.unique()
-    grouped = pd.DataFrame({'group': groups, 'target': y}).groupby('group')
     woe_dict = {}
     iv_dict = {}
-    iv = 0
-    
-    for group in grouped.groups.keys():
-        group_stats = grouped.get_group(group)
-        good = sum(group_stats['target'] == 0)
-        bad = sum(group_stats['target'] == 1)
+    for feature in features: 
+        if X[feature].dtypes in ['object', 'category']:
+            # For categorical variables, use unique values as bins
+            groups = pd.qcut(X[feature].astype('category').cat.codes, q=bins, duplicates='drop')
+        else:
+            # For numerical variables, create equal-frequency bins
+            groups = pd.qcut(X[feature], q=bins, duplicates='drop')
         
-        # Add smoothing to handle zero counts
-        good = good + 0.5
-        bad = bad + 0.5
+        # Store bin edges for future use
+        bins_dict[feature] = groups.unique()
+        grouped = pd.DataFrame({'group': groups, 'target': y}).groupby('group')
+        iv = 0
         
-        good_rate = good / sum(y == 0)
-        bad_rate = bad / sum(y == 1)
+        for group in grouped.groups.keys():
+            group_stats = grouped.get_group(group)
+            good = sum(group_stats['target'] == 0)
+            bad = sum(group_stats['target'] == 1)
+            
+            # Add smoothing to handle zero counts
+            good = good + 0.5
+            bad = bad + 0.5
+            
+            good_rate = good / (sum(y == 0))
+            bad_rate = bad / (sum(y == 1))
+            
+            woe = np.log(good_rate / bad_rate)
+            iv += (good_rate - bad_rate) * woe
+            
+            woe_dict[group] = woe
         
-        woe = np.log(good_rate / bad_rate)
-        iv += (good_rate - bad_rate) * woe
+        woe_dict[feature] = woe_dict
+        iv_dict[feature] = iv
         
-        woe_dict[group] = woe
-    
-    woe_dict[feature] = woe_dict
-    iv_dict[feature] = iv
-    
-    return woe_dict, iv
+    return woe_dict, iv_dict
 
 
 def transform_woe(
