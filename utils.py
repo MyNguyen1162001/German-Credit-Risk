@@ -491,55 +491,50 @@ def ScoreScalingParameters (
     return factor, offset
 
 
-def calculate_woe_iv(
-        X: pd.DataFrame,
-        y: pd.DataFrame,
-        features, 
-        bins=10
-):  
-      
-    bins_dict = {}
-    woe_dict = {}
-    iv_dict = {}
-    for feature in features: 
-        if X[feature].dtypes in ['object', 'category']:
-            # For categorical variables, use unique values as bins
-            groups = pd.qcut(X[feature].astype('category').cat.codes, q=bins, duplicates='drop')
-        else:
-            # For numerical variables, create equal-frequency bins
-            groups = pd.qcut(X[feature], q=bins, duplicates='drop')
-        
-        # Store bin edges for future use
-        bins_dict[feature] = groups.unique()
-        grouped = pd.DataFrame({'group': groups, 'target': y}).groupby('group')
-        iv = 0
-        
-        for group in grouped.groups.keys():
-            group_stats = grouped.get_group(group)
-            good = sum(group_stats['target'] == 0)
-            bad = sum(group_stats['target'] == 1)
-            
-            # Add smoothing to handle zero counts
-            good = good + 0.5
-            bad = bad + 0.5
-            
-            good_rate = good / (sum(y == 0))
-            bad_rate = bad / (sum(y == 1))
-            
-            woe = np.log(good_rate / bad_rate)
-            iv += (good_rate - bad_rate) * woe
-            
-            woe_dict[group] = woe
-        
-        woe_dict[feature] = woe_dict
-        iv_dict[feature] = iv
-        
-    return woe_dict, iv_dict
+def calculate_woe_iv(X, y, feature, bins=10):
+   bins_dict = {}
+   woe_dict = {}
+   iv_dict = {}
+
+   # Create bins based on data type
+   if X[feature].dtype in ['object', 'category']:
+       groups = pd.qcut(X[feature].astype('category').cat.codes, q=bins, duplicates='drop')
+   else:
+       groups = pd.qcut(X[feature], q=bins, duplicates='drop')
+   
+   bins_dict[feature] = groups.unique()
+   
+   # Calculate WOE and IV for each group
+   grouped = pd.DataFrame({'group': groups, 'target': y}).groupby('group')
+   iv = 0
+   group_woes = {}
+   
+   for group in grouped.groups.keys():
+       group_stats = grouped.get_group(group)
+       good = sum(group_stats['target'] == 0) + 0.5  # Add smoothing
+       bad = sum(group_stats['target'] == 1) + 0.5
+       
+       n_bad = sum(y == 0)
+       n_good = sum(y == 1)
+       
+       eps = 1e-10
+       good_rate = good / n_bad if n_bad != 0 else eps
+       bad_rate = bad / n_good if n_good != 0 else eps
+       
+       woe = np.log(good_rate / bad_rate)
+       iv += (good_rate - bad_rate) * woe
+       group_woes[group] = woe
+   
+   woe_dict[feature] = group_woes
+   iv_dict[feature] = iv
+   
+   return woe_dict, iv_dict, bins_dict
 
 
 def transform_woe(
         woe_dict: pd.DataFrame,
-        X: pd.DataFrame, 
+        bins_dict: pd.DataFrame,
+        X: pd.DataFrame,
         feature: str
 ):
     if X[feature].dtype in ['object', 'category']:
@@ -550,30 +545,54 @@ def transform_woe(
         groups = pd.qcut(X[feature], 
                         q=len(bins_dict[feature]), 
                         duplicates='drop')
-    
+        
     return groups.map(woe_dict[feature])
 
 
-def fit(self, X, y):
+def fit(X, y):
     """Fit the scorecard model"""
-    # Calculate WoE and IV for all features
     X_woe = pd.DataFrame()
-    for feature in X.columns:
-        calculate_woe_iv(X, y, feature)
-        X_woe[feature] = transform_woe(X, feature)
+    woe_dicts = {}
     
-    # Fit logistic regression
+    # Calculate WOE and IV for each feature
+    for feature in X.columns:
+        woe_dict, iv, bins_dict = calculate_woe_iv(X, y, feature)
+        woe_dicts[feature] = woe_dict
+        X_woe[feature] = transform_woe(woe_dict=woe_dict, 
+                                     bins_dict=bins_dict,
+                                     X=X,
+                                     feature=feature)
+    
+    # Convert categorical columns to string type first
+    cat_cols = ['Age', 'Sex', 'Job', 'Housing', 'Purpose', 'Saving accounts', 'Checking account']
+    for col in cat_cols:
+        if col in X_woe.columns:
+            X_woe[col] = X_woe[col].astype(str)
+    
+    # Process features
+    X_woe = process_categorical_features(
+        dataset=X_woe,
+        categories_columns=cat_cols,
+        fill_value='missing',
+        encoding_type='label'
+    )
+    X_woe = processing_numerical_columns(
+        dataset=X_woe,
+        numerical_columns=['Credit amount', 'Duration', 'Age'],
+        fill_strategy='mean',
+        handle_outliers=False,
+        scaling_type='robust'
+    )
+    
+    # Fit model
     model = LogisticRegression(random_state=42)
     model.fit(X_woe, y)
     
-    return self
+    return model, woe_dicts, X_woe
 
 
-def transform_to_score(model, X, offset, factor):
+def transform_to_score(model, X, X_woe, offset, factor):
     """Transform features to credit score"""
-    X_woe = pd.DataFrame()
-    for feature in X.columns:
-        X_woe[feature] = transform_woe(X, feature)
     
     # Calculate log odds
     log_odds = model.predict_proba(X_woe)[:, 1]
